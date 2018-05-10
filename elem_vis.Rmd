@@ -1,0 +1,92 @@
+---
+title: "Elementary Gap Goal Action Plan Vis"
+output: html_document
+date: '`r Sys.Date()`'
+---
+
+
+```{r topic modeling LDAvis, eval = FALSE}
+
+library("tidytext")
+library("tidyverse")
+library("topicmodels")
+library("LDAvis")
+library("servr")
+
+#get document-topic probabilities (theta)
+elem_gapGoal_CTM043_10 <- readRDS("C:/Users/hpoquett/Documents/csip_topic_model/Data/elem_gapGoal_CTM043_10.rda")
+
+tidy_ctm_gamma  <- function(model_obj){
+  
+  
+  model_obj %>% 
+    slot("gamma") 
+}
+
+elem_docProbs <- tidy_ctm_gamma(elem_gapGoal_CTM043_10)
+
+#get topic-term probabilities (phi)
+tidy_ctm_beta  <- function(model_obj){
+  
+  Terms  <- model_obj %>% 
+    slot("terms") 
+  
+  model_obj %>% 
+    slot("beta")  %>% 
+    as_data_frame() %>%
+    setNames(Terms) %>%
+    mutate_all(funs(exp))
+}
+
+elem_termProbs <- as.matrix(tidy_ctm_beta(elem_gapGoal_CTM043_10))
+
+#get number of tokens per document
+elem_gapGoal_dtm_slim043 <- readRDS("C:/Users/hpoquett/Documents/csip_topic_model/Data/elem_gapGoal_dtm_slim043.rda")
+
+'%ni%' <- Negate('%in%')
+remove_docs <- c(34, 79, 99, 126, 244, 288, 452, 475, 482) #take out documents that did not receive a topic
+
+elem_gapGoal_tidy <- tidy(elem_gapGoal_dtm_slim043) %>%
+  filter(document %ni% remove_docs )
+
+doc.length.elem <- elem_gapGoal_tidy %>%
+  group_by(document) %>%
+  summarise(docTerm_n = sum(count)) %>%
+  select(docTerm_n)
+
+doc.length.elem.use <- as.vector(unlist(doc.length.elem))
+
+#get term frequency
+term.frequency.elem <- elem_gapGoal_tidy %>%
+  group_by(term) %>%
+  summarise(term_n = sum(count))
+
+term.frequency.elem.use <- as.vector(unlist(term.frequency.elem[,2]))
+
+
+#get vocab
+vocab_elem <- elem_gapGoal_tidy %>%
+  group_by(term) %>%
+  summarise(n = n()) %>%
+  select(-n)
+
+vocab_elem_use <- as.vector(unlist(vocab_elem))
+
+#create big list
+gapGoal_bigList <- list(theta = elem_docProbs, 
+                        phi = elem_termProbs, 
+                        vocab = vocab_elem_use,
+                        doc.length = doc.length.elem.use,
+                        term.frequency = term.frequency.elem.use)
+
+
+# create the JSON object to feed the visualization:
+gapGoal_json <- createJSON(theta = gapGoal_bigList$theta, 
+                   phi = gapGoal_bigList$phi, 
+                   doc.length = gapGoal_bigList$doc.length, 
+                   vocab = gapGoal_bigList$vocab, 
+                   term.frequency = gapGoal_bigList$term.frequency)
+
+serVis(gapGoal_json, out.dir = "elem_vis", open.browser = TRUE)
+
+```
